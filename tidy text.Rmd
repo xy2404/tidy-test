@@ -1,0 +1,85 @@
+---
+title: "Untitled"
+author: "Annie Yu xy2404"
+date: "11/29/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(viridis)
+## Loading required package: viridisLite
+library(p8105.datasets)
+
+library(tidytext)
+
+```
+
+```{r}
+data("rest_inspec")
+
+rest_inspec = 
+  rest_inspec %>% 
+  filter(grade %in% c("A", "B", "C")) %>% 
+  mutate(inspection_num = row_number(),
+         boro = str_to_title(boro)) %>% 
+  select(inspection_num, boro, grade, score, critical_flag, dba, cuisine_description, zipcode, violation_description)
+
+```
+
+```{r}
+inspection_words = 
+  rest_inspec %>% 
+  unnest_tokens(word, violation_description)
+```
+
+```{r}
+data(stop_words)
+
+inspection_words = 
+  anti_join(inspection_words, stop_words)
+```
+
+```{r}
+inspection_words %>% 
+  count(word, sort = TRUE) %>% # like group by to count the number of each
+  top_n(10) %>% 
+  mutate(word = fct_reorder(word, n)) %>% 
+  ggplot(aes(x = word, y = n)) + 
+  geom_bar(stat = "identity", fill = "blue", alpha = .6) + 
+  coord_flip()
+```
+
+
+```{r}
+word_ratios = 
+  inspection_words %>%
+  filter(grade %in% c("A", "C")) %>% 
+  count(word, grade) %>%
+  group_by(word) %>% 
+  filter(sum(n) >= 5) %>%
+  ungroup() %>%
+  spread(grade, n, fill = 0) %>%
+  mutate(
+    C_odds = (C + 1) / (sum(C) + 1),
+    A_odds = (A + 1) / (sum(A) + 1),
+    log_OR = log(C_odds / A_odds)
+  ) %>%
+  arrange(desc(log_OR)) 
+```
+
+```{r}
+word_ratios %>%
+  mutate(pos_log_OR = ifelse(log_OR > 0, "C > A", "A > C")) %>% 
+  group_by(pos_log_OR) %>%
+  top_n(15, abs(log_OR)) %>%
+  ungroup() %>%
+  mutate(word = fct_reorder(word, log_OR)) %>%
+  ggplot(aes(word, log_OR, fill = pos_log_OR)) +
+  geom_col() +
+  coord_flip() +
+  ylab("log odds ratio (C/A)") +
+  scale_fill_discrete(name = "")
+```
+
